@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
-//use solana_sdk::signature::Signer;
+use solana_sdk::signature::{Signature};
 use std::str;
 //use anyhow::Result;
 
@@ -95,6 +95,13 @@ struct AccountFilter {
     memcmp: Memcmp,
 }
 
+use std::convert::TryInto;
+
+fn vec_to_array<T, const N: usize>(v: Vec<T>) -> [T; N] {
+    v.try_into()
+        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
+}
+
 #[async_trait]
 trait Client {
     // https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo
@@ -120,7 +127,11 @@ trait Client {
     ) -> Result<Vec<Account>, Error>;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturestatuses
-    //async fn get_signature_statuses(&self, signatures: &[Signature], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
+    async fn get_signature_statuses(
+        &self, 
+        signatures: &[Signature], 
+        slice: Option<AccountSliceConfig>
+    ) -> Result<Vec<Account>, Error>;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
     //async fn get_signatures_for_address(&self, address: &Pubkey) -> Result<Vec<Account>, Error>;
@@ -278,6 +289,46 @@ impl Client for RpcClient {
         serde_json::from_value(response["result"]["value"].clone()).unwrap()
 
     }
+
+    async fn get_signature_statuses (
+        &self, 
+        signatures: &[Signature], 
+        slice: Option<AccountSliceConfig>,
+    ) -> Result<Vec<Account>, Error> {
+
+        let mut signs: Vec<String> = Vec::new();
+        for item in signatures {
+            signs.push(bs58::encode(item).into_string());
+        }
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getMultipleAccounts",
+            "params": [
+                signs,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"]["value"].clone()).unwrap()
+
+    }
+
+    
 }
 
 #[cfg(test)]
@@ -286,6 +337,8 @@ mod tests {
     use serde::Serialize;
     use serde_json::Value;
     use solana_sdk::account::Account;
+    use solana_sdk::signature::Signer;
+    use solana_sdk::signature::Keypair;
 
     #[tokio::test]
     async fn get_account_info_test() {
@@ -305,24 +358,15 @@ mod tests {
             .into_vec()
             .unwrap();
         let account = solana_sdk::pubkey::Pubkey::new(&arr);
-        //println!("Account: {}", account);
         let response = rpc_client.get_program_accounts(account, None, None).await;
-        // match response {
-        //     Ok(result) => {
-        //         println!("{:?}", result);
-        //     },
-        //     Err(error) => {
-        //         println!("Some error: {:?}", error);
-        //     },
-        // };
-        //println!("{:#?}", result);
+
         println!("{:?}", response);
     }
 
     #[tokio::test]
     async fn get_multiple_accounts_test() {
         let rpc_client = RpcClient {};
-        let arr = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
+        let arr = bs58::decode("2VWq8XTcDZBvi8v3i8RHonoPP9w74oNDqUeXJortxCZh")
             .into_vec()
             .unwrap();
         let arr1 = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
@@ -332,6 +376,19 @@ mod tests {
         let account1 = solana_sdk::pubkey::Pubkey::new(&arr1);
        
         let response = rpc_client.get_multiple_accounts(&[account, account1], None).await;
+        
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_signature_statuses_test() {
+        let rpc_client = RpcClient {};
+
+        let signature1 = Keypair::new().sign_message(&[0u8]);
+        
+        let signature2 = Keypair::new().sign_message(&[0u8]);
+       
+        let response = rpc_client.get_signature_statuses(&[signature1, signature2], None).await;
         
         println!("{:?}", response);
     }
