@@ -306,7 +306,7 @@ mod tests {
             .unwrap();
         let account = solana_sdk::pubkey::Pubkey::new(&arr);
         //println!("Account: {}", account);
-        rpc_client.get_program_accounts(account, None, None).await;
+        let response = rpc_client.get_program_accounts(account, None, None).await;
         // match response {
         //     Ok(result) => {
         //         println!("{:?}", result);
@@ -316,6 +316,23 @@ mod tests {
         //     },
         // };
         //println!("{:#?}", result);
-        println!("test",);
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_multiple_accounts_test() {
+        let rpc_client = RpcClient {};
+        let arr = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
+            .into_vec()
+            .unwrap();
+        let arr1 = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
+            .into_vec()
+            .unwrap();
+        let account = solana_sdk::pubkey::Pubkey::new(&arr);
+        let account1 = solana_sdk::pubkey::Pubkey::new(&arr1);
+       
+        let response = rpc_client.get_multiple_accounts(&[account, account1], None).await;
+        
+        println!("{:?}", response);
     }
 }
