@@ -2635,6 +2635,7 @@ dependencies = [
 name = "solana-rpc-client"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "bs58 0.4.0",
  "reqwest",

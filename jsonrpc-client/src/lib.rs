@@ -1,11 +1,21 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::{Value};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Signer;
+//use solana_sdk::signature::Signer;
+use std::str;
+//use anyhow::Result;
 
 pub type Epoch = u64;
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transaction {
+    pub program: String,
+    pub parsed: Value,
+    pub space: u64,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +64,14 @@ pub enum ErrorCode {
     ServerError(i64),
 }
 
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CommitmentConfig {
+    Finalized,
+    Confirmed,
+    Processed,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Error {
     pub code: ErrorCode,
@@ -93,46 +111,48 @@ trait Client {
         slice: Option<AccountSliceConfig>, 
         filters: Option<&[AccountFilter]>
     ) -> Result<Vec<Account>, Error>;
-    /*
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
-       async fn get_multiple_accounts(&self, accounts: &[Pubkey], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
-       async fn get_program_accounts(&self, program: Pubkey, slice: Option<AccountSliceConfig>, filters: Option<&[AccountFilter]>) -> Result<Vec<Account>, Error>;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
+    async fn get_multiple_accounts(
+        &self,
+        accounts: &[Pubkey], 
+        slice: Option<AccountSliceConfig>
+    ) -> Result<Vec<Account>, Error>;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturestatuses
-       async fn get_signature_statuses(&self, signatures: &[Signature], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturestatuses
+    //async fn get_signature_statuses(&self, signatures: &[Signature], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
-       async fn get_signatures_for_address(&self, address: &Pubkey) -> Result<Vec<Account>, Error>;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
+    //async fn get_signatures_for_address(&self, address: &Pubkey) -> Result<Vec<Account>, Error>;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getslot
-       async fn get_slot(&self, slice: Option<AccountSliceConfig>) -> u64;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#getslot
+    //async fn get_slot(&self, slice: Option<AccountSliceConfig>) -> u64;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
-       async fn get_transaction(&self, program: Pubkey, commitment_config: CommitmentConfig, ) -> u64;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
+    //async fn get_transaction(&self, program: Pubkey, commitment_config: CommitmentConfig, ) -> u64;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
-       async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
+    //async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
-       async fn send_transaction(&self, transaction: &Transaction) -> u64;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
+    //async fn send_transaction(&self, transaction: &Transaction) -> u64;
 
-       // https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
-       async fn simulate_transaction(&self, transaction: &Transaction,) -> u64;
+    // https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
+    //async fn simulate_transaction(&self, transaction: &Transaction,) -> u64;
 
-    */
 }
 
 struct RpcClient {}
 
 #[async_trait]
 impl Client for RpcClient {
+
     async fn get_account_info(
         &self,
         account: Pubkey,
         slice: Option<AccountSliceConfig>,
     ) -> Result<Account, Error> {
+
         let json = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -171,11 +191,19 @@ impl Client for RpcClient {
         slice: Option<AccountSliceConfig>,
         filters: Option<&[AccountFilter]>,
     ) -> Result<Vec<Account>, Error> {
+
+        let addr = bs58::encode(account).into_string();
+
         let json = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getProgramAccounts",
-            "params": ["SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8"]
+            "params": [
+                addr,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ],
         });
 
         let client = reqwest::Client::new();
@@ -189,16 +217,66 @@ impl Client for RpcClient {
             .await
             .unwrap();
 
-        // let res: Result<Vec<Account>, Error> = serde_json::from_value(response["result"].clone())
-        //     .expect("some error");
+        //let mut accs: Vec<Account> = Vec::new();
 
-        // for r in res.iter() {
-        //     println!("{:?}", r);
+        // let arr = response["result"].as_array().unwrap();
+        // for item in arr.into_iter() {
+        //     let acc: Account = Account {
+        //         lamports: serde_json::from_value(item["account"]["lamports"].clone()).unwrap(),
+        //         data: serde_json::from_value(item["account"]["data"].clone()).unwrap(),
+        //         owner: serde_json::from_value(item["account"]["owner"].clone()).unwrap(),
+        //         executable: serde_json::from_value(item["account"]["executable"].clone()).unwrap(),
+        //         rent_epoch: serde_json::from_value(item["account"]["rent_epoch"].clone()).unwrap(),
+        //     };
+        //     accs.push(acc.clone());
+        //     println!("{} - {}", item["pubkey"].as_str().unwrap(), acc.lamports);
         // }
 
-        // return res;
+        // let error: Error = Error {
+        //     code: ErrorCode::InvalidRequest,
+        //     message: String::from(""),
+        //     data: None,
+        // };
 
         serde_json::from_value(response["result"].clone()).unwrap()
+    }
+
+    async fn get_multiple_accounts (
+        &self,
+        accounts: &[Pubkey],
+        slice: Option<AccountSliceConfig>,
+    ) -> Result<Vec<Account>, Error> {
+
+        let mut accs: Vec<String> = Vec::new();
+        for item in accounts {
+            accs.push(bs58::encode(item).into_string());
+        }
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getMultipleAccounts",
+            "params": [
+                accs,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"]["value"].clone()).unwrap()
+
     }
 }
 
@@ -227,7 +305,17 @@ mod tests {
             .into_vec()
             .unwrap();
         let account = solana_sdk::pubkey::Pubkey::new(&arr);
-        let response = rpc_client.get_program_accounts(account, None, None).await;
-        println!("{:#?}", response);
+        //println!("Account: {}", account);
+        rpc_client.get_program_accounts(account, None, None).await;
+        // match response {
+        //     Ok(result) => {
+        //         println!("{:?}", result);
+        //     },
+        //     Err(error) => {
+        //         println!("Some error: {:?}", error);
+        //     },
+        // };
+        //println!("{:#?}", result);
+        println!("test",);
     }
 }
