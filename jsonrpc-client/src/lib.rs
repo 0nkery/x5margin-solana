@@ -134,13 +134,23 @@ trait Client {
     ) -> Result<Vec<Account>, Error>;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
-    //async fn get_signatures_for_address(&self, address: &Pubkey) -> Result<Vec<Account>, Error>;
+    async fn get_signatures_for_address(
+        &self, 
+        address: &Pubkey
+    ) -> Result<Vec<Account>, Error>;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#getslot
-    //async fn get_slot(&self, slice: Option<AccountSliceConfig>) -> u64;
+    async fn get_slot(
+        &self, 
+        slice: Option<AccountSliceConfig>
+    ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
-    //async fn get_transaction(&self, program: Pubkey, commitment_config: CommitmentConfig, ) -> u64;
+    async fn get_transaction(
+        &self, 
+        program: Pubkey, 
+        commitment_config: CommitmentConfig, 
+    ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
     //async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
@@ -304,7 +314,7 @@ impl Client for RpcClient {
         let json = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
-            "method": "getMultipleAccounts",
+            "method": "getSignatureStatuses",
             "params": [
                 signs,
                 {
@@ -328,6 +338,73 @@ impl Client for RpcClient {
 
     }
 
+    async fn get_signatures_for_address (
+        &self, 
+        address: &Pubkey
+    ) -> Result<Vec<Account>, Error>{
+
+        let addr = bs58::encode(address).into_string();
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSignaturesForAddress",
+            "params": [
+                addr,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ],
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+            
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
+
+    async fn get_slot(
+        &self, 
+        slice: Option<AccountSliceConfig>
+    ) -> u64 {
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSlot",
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+            
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
+    
+    async fn get_transaction(
+        &self, 
+        program: Pubkey, 
+        commitment_config: CommitmentConfig, 
+    ) -> u64 {
+        
+    }
     
 }
 
@@ -389,6 +466,30 @@ mod tests {
         let signature2 = Keypair::new().sign_message(&[0u8]);
        
         let response = rpc_client.get_signature_statuses(&[signature1, signature2], None).await;
+        
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_signature_for_address_test() {
+
+        let rpc_client = RpcClient {};
+        let arr = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
+            .into_vec()
+            .unwrap();
+        let account = solana_sdk::pubkey::Pubkey::new(&arr);
+       
+        let response = rpc_client.get_signatures_for_address(&account).await;
+        
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_slot_test() {
+
+        let rpc_client = RpcClient {};
+       
+        let response = rpc_client.get_slot(None).await;
         
         println!("{:?}", response);
     }
