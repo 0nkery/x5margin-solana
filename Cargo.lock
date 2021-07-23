@@ -2637,6 +2637,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "bs58 0.4.0",
  "reqwest",
  "serde",

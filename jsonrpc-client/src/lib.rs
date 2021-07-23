@@ -5,6 +5,7 @@ use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Signature};
 use std::str;
+use bincode::serialize;
 //use anyhow::Result;
 
 pub type Epoch = u64;
@@ -166,10 +167,26 @@ trait Client {
     ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
-    //async fn send_transaction(&self, transaction: &Transaction) -> u64;
+    // async fn send_transaction(
+    //     &self, 
+    //     transaction: &Transaction,
+    // ) -> u64;
+    
+    async fn send_transaction(
+        &self, 
+        transaction: &solana_sdk::transaction::Transaction,
+    ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
-    //async fn simulate_transaction(&self, transaction: &Transaction,) -> u64;
+    // async fn simulate_transaction(
+    //     &self, 
+    //     transaction: &Transaction,
+    // ) -> u64;
+
+    async fn simulate_transaction(
+        &self, 
+        transaction: &solana_sdk::transaction::Transaction,
+    ) -> u64;
 
 }
 
@@ -470,6 +487,68 @@ impl Client for RpcClient {
 
         serde_json::from_value(response["result"].clone()).unwrap()
     }
+
+    async fn send_transaction(
+        &self, 
+        transaction: &solana_sdk::transaction::Transaction,
+    ) -> u64 {
+
+        let serialized = serialize(transaction).unwrap();
+        let encoded = bs58::encode(serialized).into_string();//base64::encode(serialized)
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "sendTransaction",
+            "params": [
+                encoded
+            ],
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
+
+    async fn simulate_transaction(
+        &self, 
+        transaction: &solana_sdk::transaction::Transaction,
+    ) -> u64 {
+
+        let serialized = serialize(transaction).unwrap();
+        let encoded = bs58::encode(serialized).into_string();//base64::encode(serialized)
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "simulateTransaction",
+            "params": [
+                encoded
+            ],
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
     
 }
 
@@ -478,9 +557,40 @@ mod tests {
     use crate::{Client, RpcClient};
     use serde::Serialize;
     use serde_json::Value;
-    use solana_sdk::account::Account;
-    use solana_sdk::signature::Signer;
-    use solana_sdk::signature::Keypair;
+    use solana_sdk::account::{Account};
+    use solana_sdk::signature::{Signer, Keypair};
+    use solana_sdk::transaction::{Transaction};
+    use solana_sdk::instruction::{AccountMeta, Instruction};
+    use solana_sdk::pubkey::Pubkey;
+    use solana_sdk::message::Message;
+    use solana_sdk::hash::Hash;
+
+    fn create_sample_transaction() -> Transaction {
+        let keypair = Keypair::from_bytes(&[
+            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 255, 101, 36, 24, 124, 23,
+            167, 21, 132, 204, 155, 5, 185, 58, 121, 75, 156, 227, 116, 193, 215, 38, 142, 22, 8,
+            14, 229, 239, 119, 93, 5, 218, 161, 35, 3, 33, 0, 36, 100, 158, 252, 33, 161, 97, 185,
+            62, 89, 99,
+        ])
+        .unwrap();
+        let to = Pubkey::new(&[
+            1, 1, 1, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8, 7, 6, 5, 4,
+            1, 1, 1,
+        ]);
+
+        let program_id = Pubkey::new(&[
+            2, 2, 2, 4, 5, 6, 7, 8, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 8, 7, 6, 5, 4,
+            2, 2, 2,
+        ]);
+        let account_metas = vec![
+            AccountMeta::new(keypair.pubkey(), true),
+            AccountMeta::new(to, false),
+        ];
+        let instruction =
+            Instruction::new_with_bincode(program_id, &(1u8, 2u8, 3u8), account_metas);
+        let message = Message::new(&[instruction], Some(&keypair.pubkey()));
+        Transaction::new(&[&keypair], message, Hash::default())
+    }
 
     #[tokio::test]
     async fn get_account_info_test() {
@@ -577,6 +687,24 @@ mod tests {
             .unwrap();
         let account = solana_sdk::pubkey::Pubkey::new(&arr);
         let response = rpc_client.request_airdrop(&account, 1000000000).await;
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn send_transaction_test() {
+        let rpc_client = RpcClient {};
+
+        let transaction = create_sample_transaction();
+
+        let response = rpc_client.send_transaction(&transaction).await;
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn simulate_transaction_test() {
+        let rpc_client = RpcClient {};
+        let transaction = create_sample_transaction();
+        let response = rpc_client.simulate_transaction(&transaction).await;
         println!("{:?}", response);
     }
 }
