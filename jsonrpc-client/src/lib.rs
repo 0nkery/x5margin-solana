@@ -146,14 +146,24 @@ trait Client {
     ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
+    // async fn get_transaction(
+    //     &self, 
+    //     program: Pubkey, 
+    //     commitment_config: CommitmentConfig, 
+    // ) -> u64;
+
     async fn get_transaction(
         &self, 
-        program: Pubkey, 
+        signature: Signature, 
         commitment_config: CommitmentConfig, 
     ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
-    //async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
+    async fn request_airdrop(
+        &self, 
+        pubkey: &Pubkey, 
+        lamports: u64
+    ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
     //async fn send_transaction(&self, transaction: &Transaction) -> u64;
@@ -400,10 +410,65 @@ impl Client for RpcClient {
     
     async fn get_transaction(
         &self, 
-        program: Pubkey, 
+        signature: Signature, 
         commitment_config: CommitmentConfig, 
     ) -> u64 {
-        
+        let sign = bs58::encode(signature).into_string();
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTransaction",
+            "params": [
+                sign,
+                "jsonParsed"
+            ],
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
+
+    async fn request_airdrop(
+        &self, 
+        pubkey: &Pubkey, 
+        lamports: u64
+    ) -> u64 {
+
+        let addr = bs58::encode(pubkey).into_string();
+        let amount = lamports.to_string();
+
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "requestAirdrop",
+            "params": [
+                addr,
+                amount,
+            ],
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
     }
     
 }
@@ -491,6 +556,27 @@ mod tests {
        
         let response = rpc_client.get_slot(None).await;
         
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_transaction_test() {
+        let rpc_client = RpcClient {};
+        let signature = Keypair::new().sign_message(&[0u8]);
+        
+        let response = rpc_client.get_transaction(signature, super::CommitmentConfig::Finalized).await;
+
+        println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn request_airdrop() {
+        let rpc_client = RpcClient {};
+        let arr = bs58::decode("2VWq8XTcDZBvi8v3i8RHonoPP9w74oNDqUeXJortxCZh")
+            .into_vec()
+            .unwrap();
+        let account = solana_sdk::pubkey::Pubkey::new(&arr);
+        let response = rpc_client.request_airdrop(&account, 1000000000).await;
         println!("{:?}", response);
     }
 }
