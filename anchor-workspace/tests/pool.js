@@ -1,6 +1,5 @@
 const anchor = require('@project-serum/anchor');
 const assert = require("assert");
-const { globalAgent } = require('http');
 const poolClient = require("../web3/pool/index");
 
 describe('pool', () => {
@@ -247,11 +246,9 @@ describe('pool', () => {
     // 100 - 100 + 50 + 150
     assert.ok(targetWallet.amount.eqn(200));
 
-    try {
-      const ticketAccount = await program.account.ticket.fetch(globals.ticket.publicKey);
-      assert.ok(false, "ticket should be deleted");
-    } catch {
-      assert.ok(true);
-    }
+    assert.rejects(
+      async () => await program.account.ticket.fetch(globals.ticket.publicKey),
+      /^Error: Account does not exist/
+    );
   });
 });
