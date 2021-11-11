@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, AccountsClose};
 use anchor_spl::token::{self, Mint, TokenAccount, Transfer};
 
 use az::CheckedAs;
@@ -53,21 +53,18 @@ impl Default for Ticket {
     }
 }
 
-// TODO: not so elegant
-fn ticket_collect<'info>(
-    ticket: &ProgramAccount<'info, Ticket>,
-    beneficiary: &AccountInfo<'info>,
-) -> Result<bool> {
-    if ticket.staked_amount == 0 {
-        let beneficiary_starting_lamports = beneficiary.lamports();
-        **beneficiary.lamports.borrow_mut() = beneficiary_starting_lamports
-            .checked_add(ticket.as_ref().lamports())
-            .ok_or(ErrorCode::IntegerOverlow)?;
-        **ticket.as_ref().lamports.borrow_mut() = 0;
+trait Collect<'info> {
+    fn collect(&self, beneficiary: &AccountInfo<'info>) -> Result<bool>;
+}
 
-        Ok(true)
-    } else {
-        Ok(false)
+impl<'info> Collect<'info> for ProgramAccount<'info, Ticket> {
+    fn collect(&self, beneficiary: &AccountInfo<'info>) -> Result<bool> {
+        if self.staked_amount == 0 {
+            self.close(beneficiary.clone())?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -227,7 +224,7 @@ pub mod pool {
         pool.stake_acquired_amount -= transfer_amount;
 
         ticket.staked_amount -= transfer_amount;
-        ticket_collect(ticket, &ctx.accounts.staker)?;
+        ticket.collect(&ctx.accounts.staker)?;
 
         Ok(())
     }
@@ -284,7 +281,7 @@ pub mod pool {
 
         ticket.staked_amount = 0;
 
-        let collected = ticket_collect(ticket, &ctx.accounts.staker)?;
+        let collected = ticket.collect(&ctx.accounts.staker)?;
         require!(collected, TicketCollectionFailure);
 
         Ok(())
